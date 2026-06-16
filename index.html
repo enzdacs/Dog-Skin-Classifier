@@ -87,15 +87,17 @@
         <p id="current-img-name" class="current-img-name"></p>
 
         <div class="classify-controls" id="classify-controls">
-          <button id="prev-img" class="nav-arrow" title="Previous">&#8592;</button>
-          <div class="classify-btn-row" id="classify-btn-row">
-            <button class="classify-btn atopic"      data-category="Atopic Dermatitis">Atopic</button>
-            <button class="classify-btn mange"        data-category="Sarcoptic Mange">Mange</button>
-            <button class="classify-btn pyotraumatic" data-category="Pyotraumatic Dermatitis">Pyotrauma</button>
-            <button class="classify-btn healthy"      data-category="Healthy">Healthy</button>
-            <button class="classify-btn unknown"      data-category="Unknown">Unknown</button>
+          <div class="classify-controls-inner">
+            <button id="prev-img" class="nav-arrow" title="Previous">&#8592;</button>
+            <div class="classify-btn-row" id="classify-btn-row">
+              <button class="classify-btn atopic"      data-category="Atopic Dermatitis">Atopic</button>
+              <button class="classify-btn mange"        data-category="Sarcoptic Mange">Mange</button>
+              <button class="classify-btn pyotraumatic" data-category="Pyotraumatic Dermatitis">Pyotrauma</button>
+              <button class="classify-btn healthy"      data-category="Healthy">Healthy</button>
+              <button class="classify-btn unknown"      data-category="Unknown">Unknown</button>
+            </div>
+            <button id="next-img" class="nav-arrow" title="Next">&#8594;</button>
           </div>
-          <button id="next-img" class="nav-arrow" title="Next">&#8594;</button>
         </div>
 
         <div id="folder-done-msg" class="folder-done-msg hidden">
@@ -106,7 +108,7 @@
     </main>
 
     <!-- ===== SAVED TAB ===== -->
-    <main id="tab-saved" class="tab-panel">
+    <main id="tab-saved" class="tab-panel hidden">
       <div class="saved-layout">
         <aside class="saved-sidebar">
           <h2 class="section-title">Directories</h2>
