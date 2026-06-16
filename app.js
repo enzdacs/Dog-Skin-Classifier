@@ -358,20 +358,19 @@ async function openFolder(idx) {
   setImgState("loading");
 
   try {
-    const imgs = await sbQuery(`/dermsort_images?folder_id=eq.${folder.id}&order=relative_path.asc`);
+    const imgs = await sbQuery(`/dermsort_images?folder_id=eq.${folder.id}&category=is.null&order=relative_path.asc`);
     currentImages = (imgs || []).map(img => ({
       ...img,
       public_url: sbPublicUrl(img.storage_path)
     }));
 
+    currentImgIdx = 0;
+
     if (currentImages.length === 0) {
-      showFolderDone(true);
+      showFolderDone(folder.total_images === 0);
       return;
     }
 
-    // Start at first unclassified
-    currentImgIdx = currentImages.findIndex(i => !i.category);
-    if (currentImgIdx < 0) currentImgIdx = 0;
     showCurrentImage();
   } catch (e) {
     showToast("Failed to load images: " + e.message);
@@ -380,12 +379,11 @@ async function openFolder(idx) {
 }
 
 function showCurrentImage() {
-  if (currentImages.length === 0) { showFolderDone(true); return; }
-  const img       = currentImages[currentImgIdx];
-  const total     = currentImages.length;
-  const unclassed = currentImages.filter(i => !i.category).length;
+  if (currentImages.length === 0) { showFolderDone(false); return; }
+  const img   = currentImages[currentImgIdx];
+  const total = currentImages.length;
 
-  imageCounter.textContent = `${currentImgIdx + 1} / ${total}  (${unclassed} unclassified)`;
+  imageCounter.textContent = `${currentImgIdx + 1} / ${total}  (${total} unclassified)`;
   currentImgName.textContent = img.relative_path || img.file_name;
 
   prevImgBtn.disabled = currentImgIdx === 0;
@@ -396,13 +394,6 @@ function showCurrentImage() {
   tempImg.onload  = () => { classifyImgEl.src = img.public_url; setImgState("image"); };
   tempImg.onerror = () => { setImgState("error"); };
   tempImg.src = img.public_url;
-
-  // Highlight if already classified
-  document.querySelectorAll(".classify-btn[data-category]").forEach(b => b.style.outline = "");
-  if (img.category) {
-    const active = document.querySelector(`.classify-btn[data-category="${img.category}"]`);
-    if (active) active.style.outline = "3px solid white";
-  }
 }
 
 function setImgState(state) {
@@ -446,8 +437,10 @@ async function classifyImage(imgIdx, category) {
   const img = currentImages[imgIdx];
   if (!img) return;
 
-  const prevCat  = img.category;
-  img.category   = category;
+  // Lock controls during the save so a second click can't race the first
+  if (classifyControls.dataset.busy === "1") return;
+  classifyControls.dataset.busy = "1";
+  setControlsDisabled(true);
 
   try {
     await sbQuery(`/dermsort_images?id=eq.${img.id}`, {
@@ -456,10 +449,12 @@ async function classifyImage(imgIdx, category) {
       body: { category }
     });
 
-    // Update folder classified_count
+    // Image is now classified — remove it from the unclassified working set
+    currentImages.splice(imgIdx, 1);
+
+    // Update folder classified_count (one more image classified)
     const folder = folders[currentFolderIdx];
-    if (!prevCat && category) folder.classified_count = (folder.classified_count || 0) + 1;
-    if (prevCat && !category) folder.classified_count = Math.max(0, (folder.classified_count || 0) - 1);
+    folder.classified_count = (folder.classified_count || 0) + 1;
     await sbQuery(`/dermsort_folders?id=eq.${folder.id}`, {
       method: "PATCH",
       headers: { "Prefer": "return=minimal" },
@@ -468,23 +463,32 @@ async function classifyImage(imgIdx, category) {
 
     renderFolderList();
     renderCatCounts();
+    showToast(`✓ Moved to ${category}`);
 
-    // Flash then advance to next unclassified
     flashAndAdvance(() => {
-      const nextIdx = currentImages.findIndex((im, i) => i > imgIdx && !im.category);
-      if (nextIdx >= 0) {
-        currentImgIdx = nextIdx;
-        showCurrentImage();
-      } else {
-        const allDone = currentImages.every(i => i.category);
-        if (allDone) { showFolderDone(false); }
-        else { showCurrentImage(); }
+      if (currentImages.length === 0) {
+        showFolderDone(false);
+        return;
       }
+      // Keep the same index so the next image slides into view;
+      // clamp in case we just removed the last item in the list.
+      if (currentImgIdx >= currentImages.length) currentImgIdx = currentImages.length - 1;
+      showCurrentImage();
     });
   } catch (e) {
-    img.category = prevCat; // rollback
-    showToast("Save failed: " + e.message);
+    showToast("✗ Save failed — image was NOT moved: " + e.message);
+  } finally {
+    classifyControls.dataset.busy = "0";
+    setControlsDisabled(false);
   }
+}
+
+function setControlsDisabled(disabled) {
+  document.querySelectorAll(".classify-btn[data-category]").forEach(b => {
+    if (!b.closest(".move-submenu-btns")) b.disabled = disabled;
+  });
+  prevImgBtn.disabled = disabled || currentImgIdx === 0;
+  nextImgBtn.disabled = disabled || currentImgIdx === currentImages.length - 1;
 }
 
 // ---- Nav Arrows ----
