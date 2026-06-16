@@ -9,7 +9,7 @@
 // ============================================================
 const SUPABASE_URL    = "https://tomazrivkvikkgugrowl.supabase.co";
 const SUPABASE_ANON   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWF6cml2a3Zpa2tndWdyb3dsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODc4NDUsImV4cCI6MjA5NzE2Mzg0NX0.bY-kwIzUa4Udpff6jiFzJO1a-ydqOqdhWtcsWccx1ew";
-const STORAGE_BUCKET  = "dermsort-images"; // bucket name you create in Supabase
+const STORAGE_BUCKET  = "dermsort-images"; // bucket name you create in Supabasea
 // ============================================================
 
 const CATEGORIES = [
@@ -254,17 +254,32 @@ async function handleFolderUpload(fileList) {
   uploadProgressSub.textContent  = `0 / ${selected.length} images`;
 
   try {
-    // Upsert folder record
-    const folderRes = await sbQuery("/dermsort_folders", {
-      method: "POST",
-      headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
-      body: { session: SESSION, name: rootName, total_images: selected.length, classified_count: 0 }
-    });
-    const folder = Array.isArray(folderRes) ? folderRes[0] : folderRes;
-    const folderId = folder.id;
+    // Check if folder already exists for this session + name
+    const existing = await sbQuery(
+      `/dermsort_folders?session=eq.${encodeURIComponent(SESSION)}&name=eq.${encodeURIComponent(rootName)}&limit=1`
+    );
 
-    // Delete old images for this folder if re-uploading
-    await sbQuery(`/dermsort_images?folder_id=eq.${folderId}`, { method: "DELETE" });
+    let folderId;
+    if (existing && existing.length > 0) {
+      // Folder exists — update total_images and reset classified_count
+      folderId = existing[0].id;
+      await sbQuery(`/dermsort_folders?id=eq.${folderId}`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: { total_images: selected.length, classified_count: 0 }
+      });
+      // Delete old images so we re-upload clean
+      await sbQuery(`/dermsort_images?folder_id=eq.${folderId}`, { method: "DELETE" });
+    } else {
+      // New folder — insert
+      const folderRes = await sbQuery("/dermsort_folders", {
+        method: "POST",
+        headers: { "Prefer": "return=representation" },
+        body: { session: SESSION, name: rootName, total_images: selected.length, classified_count: 0 }
+      });
+      const folder = Array.isArray(folderRes) ? folderRes[0] : folderRes;
+      folderId = folder.id;
+    }
 
     // Upload each image
     const imageRows = [];
