@@ -178,6 +178,16 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .confirm-box p { margin-bottom: 1.2rem; line-height: 1.6; }
 .confirm-actions { display: flex; gap: .5rem; justify-content: center; }
 
+/* --- Classify flash animation --- */
+@keyframes classifyFlash {
+  0%   { opacity: 1; }
+  30%  { opacity: 0; transform: scale(.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.classify-flash {
+  animation: classifyFlash .35s ease forwards;
+}
+
 /* --- Toast --- */
 .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: .6rem 1.2rem; border-radius: 20px; font-size: .85rem; z-index: 500; white-space: nowrap; }
 
