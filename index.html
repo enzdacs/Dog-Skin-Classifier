@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DermSort</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Session Gate -->
+  <div id="session-gate" class="session-gate">
+    <div class="session-box">
+      <div class="logo" style="justify-content:center;margin-bottom:1.2rem;">
+        <span class="logo-mark">DS</span>
+        <span class="logo-text">DermSort</span>
+      </div>
+      <p class="session-desc">Enter a session name to access your workspace.<br/>Use the same name to return to your data.</p>
+      <input id="session-input" class="session-input" type="text" placeholder="e.g. Enzo, Team A, Batch 1" maxlength="40" />
+      <button id="session-enter" class="btn btn-primary" style="width:100%;">Enter Workspace →</button>
+      <p id="session-error" class="session-error hidden">Please enter a session name.</p>
+    </div>
+  </div>
+
+  <!-- App Shell (hidden until session is set) -->
+  <div id="app-shell" class="hidden">
+
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-mark">DS</span>
+          <span class="logo-text">DermSort</span>
+        </div>
+        <div class="header-center">
+          <span class="session-badge">Session: <strong id="session-label"></strong></span>
+        </div>
+        <nav class="tab-nav">
+          <button class="tab-btn active" data-tab="classify">Classify</button>
+          <button class="tab-btn" data-tab="saved">Saved</button>
+          <button id="switch-session-btn" class="btn btn-ghost btn-sm" style="margin-left:.5rem;">Switch</button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- ===== CLASSIFY TAB ===== -->
+    <main id="tab-classify" class="tab-panel active">
+
+      <section id="upload-section" class="upload-section">
+        <div class="upload-card">
+          <div class="upload-icon">📂</div>
+          <p class="upload-title">Upload a folder to begin</p>
+          <p class="upload-sub">Images are stored in Supabase and shared with anyone using the same session name.</p>
+          <label class="btn btn-primary upload-label">
+            Choose Folder
+            <input type="file" id="folder-input" webkitdirectory multiple hidden />
+          </label>
+        </div>
+
+        <div id="folder-list-wrap" class="folder-list-wrap hidden">
+          <div class="folder-list-header">
+            <h2 class="section-title">Uploaded Folders</h2>
+            <label class="btn btn-ghost btn-sm upload-label">
+              + Add Folder
+              <input type="file" id="folder-input-more" webkitdirectory multiple hidden />
+            </label>
+          </div>
+          <ul id="folder-list" class="folder-list"></ul>
+        </div>
+      </section>
+
+      <!-- Classify Workspace -->
+      <section id="classify-workspace" class="classify-workspace hidden">
+        <div class="workspace-top-bar">
+          <button id="back-to-folders" class="btn btn-ghost btn-sm">← Back</button>
+          <span id="workspace-folder-name" class="folder-name-label"></span>
+          <span id="image-counter" class="image-counter"></span>
+        </div>
+
+        <div id="image-viewer" class="image-viewer">
+          <div id="img-loading" class="img-loading hidden">Loading…</div>
+          <img id="classify-img" class="classify-img hidden" src="" alt="Current image" />
+          <div id="no-image-msg" class="no-image-msg hidden">
+            No matching images found.<br/>Files must be named <code>seq_IR.jpg</code>, <code>seq_IR.jpeg</code>, or <code>seq_IR.png</code>.
+          </div>
+        </div>
+
+        <p id="current-img-name" class="current-img-name"></p>
+
+        <div class="classify-controls" id="classify-controls">
+          <button id="prev-img" class="nav-arrow" title="Previous">&#8592;</button>
+          <div class="classify-btn-row" id="classify-btn-row">
+            <button class="classify-btn atopic"      data-category="Atopic Dermatitis">Atopic</button>
+            <button class="classify-btn mange"        data-category="Sarcoptic Mange">Mange</button>
+            <button class="classify-btn pyotraumatic" data-category="Pyotraumatic Dermatitis">Pyotrauma</button>
+            <button class="classify-btn healthy"      data-category="Healthy">Healthy</button>
+            <button class="classify-btn unknown"      data-category="Unknown">Unknown</button>
+          </div>
+          <button id="next-img" class="nav-arrow" title="Next">&#8594;</button>
+        </div>
+
+        <div id="folder-done-msg" class="folder-done-msg hidden">
+          <p id="done-text">All images classified.</p>
+          <button id="back-to-folders-done" class="btn btn-primary">Back to Folders</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== SAVED TAB ===== -->
+    <main id="tab-saved" class="tab-panel hidden">
+      <div class="saved-layout">
+        <aside class="saved-sidebar">
+          <h2 class="section-title">Directories</h2>
+          <ul class="category-nav">
+            <li><button class="cat-btn atopic active-cat"      data-cat="Atopic Dermatitis">Atopic Dermatitis</button></li>
+            <li><button class="cat-btn mange"                  data-cat="Sarcoptic Mange">Sarcoptic Mange</button></li>
+            <li><button class="cat-btn pyotraumatic"           data-cat="Pyotraumatic Dermatitis">Pyotraumatic</button></li>
+            <li><button class="cat-btn healthy"                data-cat="Healthy">Healthy</button></li>
+            <li><button class="cat-btn unknown"                data-cat="Unknown">Unknown</button></li>
+          </ul>
+        </aside>
+
+        <section class="saved-content">
+          <div class="saved-content-header">
+            <h3 id="saved-category-title" class="saved-cat-title">Atopic Dermatitis</h3>
+            <button id="export-btn" class="btn btn-primary btn-sm">Export ZIP</button>
+          </div>
+          <div id="saved-grid" class="saved-grid hidden"></div>
+          <div id="saved-empty" class="saved-empty">No images here yet.</div>
+          <div id="saved-loading" class="saved-empty hidden">Loading…</div>
+        </section>
+      </div>
+
+      <!-- Lightbox -->
+      <div id="lightbox" class="lightbox hidden">
+        <div class="lightbox-inner">
+          <div class="lightbox-topbar">
+            <span id="lightbox-label" class="lightbox-label"></span>
+            <button id="lightbox-close" class="lightbox-close">✕</button>
+          </div>
+          <div class="lightbox-img-wrap">
+            <button id="lb-prev" class="lb-nav">&#8592;</button>
+            <img id="lightbox-img" class="lightbox-img" src="" alt="" />
+            <button id="lb-next" class="lb-nav">&#8594;</button>
+          </div>
+          <div class="lightbox-actions">
+            <span class="lightbox-cat-badge" id="lightbox-cat-badge"></span>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;">
+              <button id="lb-move-btn"   class="btn btn-ghost btn-sm">Move to…</button>
+              <button id="lb-revert-btn" class="btn btn-ghost btn-sm">↩ Revert</button>
+              <button id="lb-delete-btn" class="btn btn-danger btn-sm">🗑 Delete</button>
+            </div>
+            <div id="move-submenu" class="move-submenu hidden">
+              <span class="move-submenu-label">Move to directory:</span>
+              <div class="move-submenu-btns">
+                <button class="classify-btn atopic sm"       data-category="Atopic Dermatitis">Atopic</button>
+                <button class="classify-btn mange sm"         data-category="Sarcoptic Mange">Mange</button>
+                <button class="classify-btn pyotraumatic sm"  data-category="Pyotraumatic Dermatitis">Pyotrauma</button>
+                <button class="classify-btn healthy sm"       data-category="Healthy">Healthy</button>
+                <button class="classify-btn unknown sm"       data-category="Unknown">Unknown</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div><!-- /app-shell -->
+
+  <!-- Upload Progress Overlay -->
+  <div id="upload-overlay" class="upload-overlay hidden">
+    <div class="upload-progress-box">
+      <p id="upload-progress-text">Uploading…</p>
+      <div class="progress-bar-wrap"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="upload-progress-sub" class="upload-progress-sub"></p>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirm-modal" class="confirm-modal hidden">
+    <div class="confirm-box">
+      <p id="confirm-text">Are you sure?</p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="btn btn-danger">Confirm</button>
+        <button id="confirm-no"  class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
