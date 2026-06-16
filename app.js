@@ -41,9 +41,10 @@ async function sbQuery(path, opts = {}) {
 }
 
 async function sbUploadFile(storagePath, file, mimeType) {
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${encodeURIComponent(storagePath)}`, {
+  const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${encodedPath}`, {
     method: "POST",
-    headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${SUPABASE_ANON}`, "Content-Type": mimeType, "x-upsert": "true" },
+    headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${SUPABASE_ANON}`, "Content-Type": mimeType || "image/jpeg", "x-upsert": "true" },
     body: file
   });
   if (!res.ok) {
@@ -53,7 +54,8 @@ async function sbUploadFile(storagePath, file, mimeType) {
 }
 
 function sbPublicUrl(storagePath) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${encodeURIComponent(storagePath)}`;
+  const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${encodedPath}`;
 }
 
 async function sbDeleteFile(storagePath) {
@@ -238,13 +240,21 @@ async function handleFolderUpload(fileList) {
   if (allImgs.length === 0) { showToast("No image files found."); return; }
 
   const rootName = files[0].webkitRelativePath.split("/")[0];
-  const depths   = allImgs.map(f => f.webkitRelativePath.split("/").length);
-  const minDepth = Math.min(...depths);
-  const selected = minDepth <= 2 ? allImgs : allImgs.filter(f => SEQ_NAMES.includes(f.name.toLowerCase()));
 
-  if (selected.length === 0) {
-    showToast("No seq_IR images found in nested folders.");
-    return;
+  // Determine if any images are in sub-folders (depth >= 3: root/subfolder/file)
+  const hasNested = allImgs.some(f => f.webkitRelativePath.split("/").length >= 3);
+
+  let selected;
+  if (!hasNested) {
+    // All images are directly in root folder — show all regardless of filename
+    selected = allImgs;
+  } else {
+    // Has sub-folders — only pick seq_IR files from anywhere in the tree
+    selected = allImgs.filter(f => SEQ_NAMES.includes(f.name.toLowerCase()));
+    if (selected.length === 0) {
+      showToast("No seq_IR images found. In nested folders, only files named seq_IR.jpg/jpeg/png are imported.");
+      return;
+    }
   }
 
   // Show progress
@@ -286,7 +296,9 @@ async function handleFolderUpload(fileList) {
     for (let i = 0; i < selected.length; i++) {
       const file        = selected[i];
       const relPath     = file.webkitRelativePath;
-      const storagePath = `${SESSION}/${folderId}/${relPath.replace(/\//g, "__")}`;
+      // Use real subfolder structure: session/folderId/subfolder/filename
+      const subPath     = relPath.split("/").slice(1).join("/"); // strip root folder name
+      const storagePath = `${SESSION}/${folderId}/${subPath}`;
 
       await sbUploadFile(storagePath, file, file.type || "image/jpeg");
       imageRows.push({ folder_id: folderId, storage_path: storagePath, file_name: file.name, relative_path: relPath, category: null });
@@ -406,7 +418,8 @@ function showFolderDone(noImages) {
   setImgState("none");
   currentImgName.textContent = "";
   imageCounter.textContent   = "";
-  classifyControls.classList.add("hidden");
+  // Keep nav arrows visible so user can still browse back, but hide classify buttons
+  classifyBtnRow.classList.add("hidden");
   doneText.textContent = noImages ? "No matching images found in this folder." : "All images classified.";
   folderDoneMsg.classList.remove("hidden");
 }
@@ -416,6 +429,18 @@ document.querySelectorAll(".classify-btn[data-category]").forEach(btn => {
   if (btn.closest(".move-submenu-btns")) return;
   btn.addEventListener("click", () => classifyImage(currentImgIdx, btn.dataset.category));
 });
+
+function flashAndAdvance(callback) {
+  const viewer = document.getElementById("image-viewer");
+  viewer.classList.remove("classify-flash");
+  // Force reflow to restart animation
+  void viewer.offsetWidth;
+  viewer.classList.add("classify-flash");
+  setTimeout(() => {
+    viewer.classList.remove("classify-flash");
+    callback();
+  }, 320);
+}
 
 async function classifyImage(imgIdx, category) {
   const img = currentImages[imgIdx];
@@ -444,15 +469,18 @@ async function classifyImage(imgIdx, category) {
     renderFolderList();
     renderCatCounts();
 
-    // Advance to next unclassified
-    const nextIdx = currentImages.findIndex((im, i) => i > imgIdx && !im.category);
-    if (nextIdx >= 0) {
-      currentImgIdx = nextIdx;
-    } else {
-      const allDone = currentImages.every(i => i.category);
-      if (allDone) { showFolderDone(false); return; }
-    }
-    showCurrentImage();
+    // Flash then advance to next unclassified
+    flashAndAdvance(() => {
+      const nextIdx = currentImages.findIndex((im, i) => i > imgIdx && !im.category);
+      if (nextIdx >= 0) {
+        currentImgIdx = nextIdx;
+        showCurrentImage();
+      } else {
+        const allDone = currentImages.every(i => i.category);
+        if (allDone) { showFolderDone(false); }
+        else { showCurrentImage(); }
+      }
+    });
   } catch (e) {
     img.category = prevCat; // rollback
     showToast("Save failed: " + e.message);
@@ -475,6 +503,9 @@ function goBack() {
   classifyBtnRow.classList.remove("hidden");
   folderDoneMsg.classList.add("hidden");
   classifyImgEl.src = "";
+  classifyImgEl.classList.add("hidden");
+  imgLoading.classList.add("hidden");
+  noImageMsg.classList.add("hidden");
 }
 
 // ---- Tabs ----
@@ -506,6 +537,13 @@ async function loadSavedCategory(cat) {
   savedGrid.innerHTML = "";
 
   try {
+    // Always ensure folders are loaded first
+    if (folders.length === 0) {
+      const rows = await sbQuery(`/dermsort_folders?session=eq.${encodeURIComponent(SESSION)}&order=created_at.asc`);
+      folders = rows || [];
+      renderFolderList();
+    }
+
     const folderIds = folders.map(f => f.id);
     if (folderIds.length === 0) {
       savedImages = [];
@@ -548,27 +586,31 @@ function renderSavedGrid() {
 }
 
 async function renderCatCounts() {
-  if (folders.length === 0) {
-    catBtns.forEach(btn => {
-      let badge = btn.querySelector(".cat-count");
-      if (!badge) { badge = document.createElement("span"); badge.className = "cat-count"; btn.appendChild(badge); }
-      badge.textContent = 0;
-    });
-    return;
-  }
+  // Zero out all counts first so sidebar always shows something
+  catBtns.forEach(btn => {
+    let badge = btn.querySelector(".cat-count");
+    if (!badge) { badge = document.createElement("span"); badge.className = "cat-count"; btn.appendChild(badge); }
+    badge.textContent = "…";
+  });
+
   try {
     const folderIds = folders.map(f => f.id);
-    const idList    = folderIds.map(id => `"${id}"`).join(",");
+    if (folderIds.length === 0) {
+      catBtns.forEach(btn => { const b = btn.querySelector(".cat-count"); if (b) b.textContent = 0; });
+      return;
+    }
+    const idList = folderIds.map(id => `"${id}"`).join(",");
     for (const cat of CATEGORIES) {
-      const rows = await sbQuery(`/dermsort_images?folder_id=in.(${idList})&category=eq.${encodeURIComponent(cat)}&select=id`);
+      const rows  = await sbQuery(`/dermsort_images?folder_id=in.(${idList})&category=eq.${encodeURIComponent(cat)}&select=id`);
       const count = (rows || []).length;
       const btn   = document.querySelector(`.cat-btn[data-cat="${cat}"]`);
       if (!btn) continue;
-      let badge = btn.querySelector(".cat-count");
-      if (!badge) { badge = document.createElement("span"); badge.className = "cat-count"; btn.appendChild(badge); }
-      badge.textContent = count;
+      const badge = btn.querySelector(".cat-count");
+      if (badge) badge.textContent = count;
     }
-  } catch (_) {}
+  } catch (_) {
+    catBtns.forEach(btn => { const b = btn.querySelector(".cat-count"); if (b) b.textContent = 0; });
+  }
 }
 
 // ---- Lightbox ----
